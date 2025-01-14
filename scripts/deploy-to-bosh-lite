@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -xe
+
+[ -z "$DEBUG" ] || set -x
+
+WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)" #taken from https://github.com/cloudfoundry/bosh-lite/blob/master/bin/provision_cf#L7
+BOSH_LITE_URL="${1:-https://192.168.50.4:25555}"
+BOSH_LITE_STEMCELL="bosh-stemcell-3262.2-warden-boshlite-ubuntu-trusty-go_agent.tgz"
+BOSH_LITE_STEMCELL_URL="https://s3.amazonaws.com/bosh-warden-stemcells/$BOSH_LITE_STEMCELL"
+CF_ROUTING_RELEASE_VERSION="0.152.0"
+CF_ROUTING_RELEASE="cf-routing-release-${CF_ROUTING_RELEASE_VERSION}.tgz"
+CF_ROUTING_RELEASE_URL="http://bosh.io/d/github.com/cloudfoundry-incubator/cf-routing-release?v=$CF_ROUTING_RELEASE_VERSION"
+BOSH_CLOUD_CONFIG="manifests/lite-cloud-config.yml"
+BOSH_MANIFEST="${BOSH_MANIFEST:-$PWD/manifests/cf-rabbitmq-broker.yml}"
+
+main() {
+  upload_stemcell
+  download_blobs
+  upload_releases
+  update_cloud_config
+  deploy
+}
+
+upload_stemcell() {
+  stemcell_name="bosh-warden-boshlite-ubuntu-jammy-go_agent"
+  stemcell_version="1.423"
+  bosh upload-stemcell \
+    --name "$stemcell_name" \
+    --version "$stemcell_version" \
+    "https://bosh.io/d/stemcells/${stemcell_name}?v=${stemcell_version}"
+}
+
+download_blobs() {
+  bosh sync-blobs
+}
+
+upload_releases() {
+  bosh upload-release --sha1 8727f95dd13e03ce503c4fecc48946442069fb55 \
+    "https://bosh.io/d/github.com/pivotal-cf/cf-rabbitmq-multitenant-broker-release?v=211.0.0"
+  bosh upload-release --sha1 667d1f0a08522885e79b815a77040783946df491 \
+    "https://bosh.io/d/github.com/cloudfoundry/routing-release?v=0.328.0"
+  bosh upload-release --sha1 a1f2540fe59100c0e73a7472f5482a1e513f854b \
+    "https://bosh.io/d/github.com/pivotal-cf/cf-rabbitmq-smoke-tests-release?v=248.0.0"
+  bosh upload-release --sha1 826e54238c4b1b65ebbc9403aba45b7ae9a9d29f \
+    "https://bosh.io/d/github.com/bosh-packages/cf-cli-release?v=1.68.0"
+  bosh upload-release --sha1 06004fa77387f4443236117604870d9eeb93acb1 \
+    "https://bosh.io/d/github.com/cloudfoundry-community/rabbitmq-smoke-tests-boshrelease?v=4"
+  bosh upload-release --sha1 77cb42398520f18e321b408cf257d9612f5116f0 \
+    "https://bosh.io/d/github.com/cloudfoundry/bpm-release?v=1.4.10"
+}
+
+update_cloud_config() {
+  bosh -n update-cloud-config "$BOSH_CLOUD_CONFIG"
+}
+
+deploy() {
+  bosh -d cf-rabbitmq-multitenant-broker -n deploy manifests/cf-rabbitmq-broker.yml
+}
+
+main

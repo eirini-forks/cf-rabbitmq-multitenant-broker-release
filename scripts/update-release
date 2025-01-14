@@ -8,4 +8,4 @@ fi
 set -xe
 
 git submodule update --init --recursive
-bundle install
+sudo bundle install
